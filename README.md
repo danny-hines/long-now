@@ -1,4 +1,4 @@
-# Orrery — the life of the solar system
+# Long Now — the life of the solar system
 
 Watch the solar system from its birth in a collapsing cloud 4.568 billion years ago to the Sun's
 death as a white dwarf 7.7 billion years from now. Scrub anywhere on the timeline, play at anything

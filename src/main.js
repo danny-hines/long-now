@@ -38,7 +38,7 @@ const app = {
   state: world.makeState(),
   scrubbing: false,
 };
-window.__orrery = { world, renderer, app }; // handy in the console
+window.__longnow = { world, renderer, app }; // handy in the console
 
 const timeline = new Timeline($('timeline'), {
   onScrub: (t) => { app.t = t; app.playing = false; app.scrubbing = true; syncTransport(); },
@@ -562,7 +562,7 @@ function frame(now) {
   }
 }
 function loop(now) { frame(now); requestAnimationFrame(loop); }
-window.__orrery.tick = (n = 1) => { for (let i = 0; i < n; i++) frame(lastFrame + 16.7); };
+window.__longnow.tick = (n = 1) => { for (let i = 0; i < n; i++) frame(lastFrame + 16.7); };
 
 timeline.setData(world.events(), world.segments());
 world.stateAt(app.t, app.state);

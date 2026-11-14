@@ -2,7 +2,7 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "orrery",
+      "name": "long-now",
       "runtimeExecutable": "npm",
       "runtimeArgs": [
         "run",
