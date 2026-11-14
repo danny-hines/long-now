@@ -18,6 +18,7 @@ const RATES = [
   [1, '1 year / s'], [10, '10 years / s'], [100, '100 years / s'], [1e3, '1,000 years / s'], [1e4, '10,000 years / s'],
   [1e5, '100,000 years / s'], [1e6, '1 million years / s'], [1e7, '10 million years / s'], [1e8, '100 million years / s'],
 ];
+const TAP = matchMedia('(pointer: coarse)').matches ? 'Tap' : 'Click'; // the word for it on this device
 const KIND_NAME = { rocky: 'Rocky planet', gas: 'Gas giant', ice: 'Ice giant', dwarf: 'Dwarf planet', moon: 'Moon' };
 
 // --- simulation plumbing ----------------------------------------------------
@@ -38,6 +39,7 @@ const app = {
   tool: null, nudge: { dir: 'prograde', u: 0.62 }, well: { pos: null, mu: 0.55, du: 0.4 },
   state: world.makeState(),
   scrubbing: false,
+  sheet: null, // which panel is open: 'tools' | 'info' | 'chronicle' | 'help'
 };
 const music = new Music('audio/score.mp3');
 window.__longnow = { world, renderer, app, music }; // handy in the console
@@ -105,28 +107,71 @@ $('btn-next').onclick = () => hop(1);
 $('speed').oninput = (e) => setRate(+e.target.value);
 $('btn-now').onclick = () => { app.t = 0; app.playing = false; syncTransport(); timeline.follow(0); };
 $('btn-fit').onclick = () => timeline.fit();
-$('btn-chron').onclick = () => { $('chronicle').hidden = !$('chronicle').hidden; $('help').hidden = true; renderChronicle(); };
+
+// --- sheets -----------------------------------------------------------------
+// On a wide screen the Intervene and info panels are always up and only the
+// chronicle and help toggle. On a small one all four are sheets, one at a time.
+const mqSheets = matchMedia('(max-width: 980px), (max-height: 520px)');
+const mqPhone = matchMedia('(max-width: 600px), (max-height: 520px)');
+const SHEET_BTN = { tools: 'btn-tools', info: 'btn-info', chronicle: 'btn-chron', help: 'btn-help' };
+function openSheet(name) {
+  // Leaving the Intervene sheet puts the tool down, so taps select bodies again.
+  if (app.sheet === 'tools' && name !== 'tools' && mqSheets.matches && app.tool) setTool(null);
+  app.sheet = name;
+  if (name) document.body.dataset.sheet = name; else delete document.body.dataset.sheet;
+  $('chronicle').hidden = name !== 'chronicle';
+  $('help').hidden = name !== 'help';
+  for (const k in SHEET_BTN) { $(SHEET_BTN[k]).classList.toggle('on', name === k); $(SHEET_BTN[k]).setAttribute('aria-pressed', String(name === k)); }
+  if (name === 'chronicle') renderChronicle();
+  applyLayout();
+}
+const toggleSheet = (name) => openSheet(app.sheet === name ? null : name);
+for (const k in SHEET_BTN) $(SHEET_BTN[k]).onclick = () => toggleSheet(k);
+document.addEventListener('click', (e) => { if (e.target.closest('[data-close]')) openSheet(null); });
+
+// Tells the CSS how tall the dock is, and on a phone re-centres the scene in
+// the space the clock, dock and any open sheet leave free.
+function applyLayout() {
+  const W = innerWidth, H = innerHeight;
+  const dockTop = $('dock').getBoundingClientRect().top;
+  document.documentElement.style.setProperty('--dock-h', `${Math.round(H - dockTop)}px`);
+  $('dock').classList.toggle('zoomed', timeline.zoomed);
+  if (!mqPhone.matches) { renderer.setViewShift(0, 0); return; }
+  let top = Math.max($('clock').getBoundingClientRect().bottom, $('bodies').getBoundingClientRect().bottom);
+  let bottom = $('dock').getBoundingClientRect().top, right = W;
+  const sheet = app.sheet && $(app.sheet);
+  if (sheet) {
+    const r = sheet.getBoundingClientRect();
+    if (r.width > W * 0.7) bottom = Math.min(bottom, r.top); else right = Math.min(right, r.left);
+  }
+  if (bottom - top < 60) top = 0;
+  renderer.setViewShift(right / 2 - W / 2, (top + bottom) / 2 - H / 2);
+}
+
 // Music starts on the first interaction (browsers block sound before one).
 function syncMusic() {
   $('btn-music').classList.toggle('on', music.enabled);
   $('btn-music').title = music.enabled ? 'Music on — click to mute (M)' : 'Music off — click to play (M)';
   $('btn-music').setAttribute('aria-pressed', String(music.enabled));
 }
-const firstGesture = () => { music.start(); removeEventListener('pointerdown', firstGesture, true); removeEventListener('keydown', firstGesture, true); };
-addEventListener('pointerdown', firstGesture, true);
-addEventListener('keydown', firstGesture, true);
+// A finger going down does not count as one, only it lifting, so listen for
+// that; the listeners stay so a phone that paused the sound can pick it up again.
+for (const type of ['pointerup', 'click', 'keydown', 'touchend']) addEventListener(type, () => music.start(), true);
+document.addEventListener('visibilitychange', () => music.setHidden(document.hidden));
 $('btn-music').onclick = () => { music.toggle(); syncMusic(); };
 syncMusic();
-$('btn-help').onclick = () => { $('help').hidden = !$('help').hidden; $('chronicle').hidden = true; };
 
 // --- camera input -----------------------------------------------------------
 const view = $('view');
 const pointers = new Map();
-let dragMoved = 0, pinch = 0, lastClick = 0;
+// dragMoved is how far the pointer has strayed from where it went down: under
+// the slop it is a click or tap, over it a drag. Fingers need more slop.
+let dragMoved = 0, dragSlop = 4, downAt = [0, 0], pinch = 0, lastClick = 0;
 view.addEventListener('pointerdown', (e) => {
-  view.setPointerCapture(e.pointerId);
+  try { view.setPointerCapture(e.pointerId); } catch {}
+  if (pointers.size === 0) { dragMoved = 0; downAt = [e.clientX, e.clientY]; dragSlop = e.pointerType === 'mouse' ? 4 : 10; }
+  else dragMoved = 99; // a second finger makes it a pinch, never a tap
   pointers.set(e.pointerId, [e.clientX, e.clientY]);
-  dragMoved = 0;
   view.classList.add('dragging');
   if (pointers.size === 2) { const [a, b] = [...pointers.values()]; pinch = Math.hypot(a[0] - b[0], a[1] - b[1]); }
 });
@@ -138,31 +183,31 @@ view.addEventListener('pointermove', (e) => {
   if (pointers.size === 2) {
     const [a, b] = [...pointers.values()];
     const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
-    if (pinch > 0) renderer.zoom(pinch / d);
+    if (pinch > 0 && d > 0) renderer.zoom(pinch / d);
     pinch = d;
     dragMoved = 99;
     return;
   }
-  dragMoved += Math.abs(dx) + Math.abs(dy);
-  if (dragMoved > 4) renderer.rotate(dx, dy);
+  dragMoved = Math.max(dragMoved, Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]));
+  if (dragMoved > dragSlop) renderer.rotate(dx, dy);
 });
 const endPointer = (e) => {
   if (!pointers.has(e.pointerId)) return;
   pointers.delete(e.pointerId);
-  view.classList.remove('dragging');
-  if (dragMoved <= 4 && e.type === 'pointerup') clickScene(e.clientX, e.clientY);
+  if (pointers.size === 0) view.classList.remove('dragging');
+  if (dragMoved <= dragSlop && e.type === 'pointerup') clickScene(e.clientX, e.clientY, e.pointerType === 'mouse' ? 14 : 26);
 };
 view.addEventListener('pointerup', endPointer);
 view.addEventListener('pointercancel', endPointer);
 view.addEventListener('wheel', (e) => { e.preventDefault(); renderer.zoom(Math.exp(e.deltaY * 0.0016)); }, { passive: false });
 
-function clickScene(x, y) {
+function clickScene(x, y, reach) {
   if (app.tool === 'well') {
     const p = renderer.eclipticPoint(x, y);
     if (p && Math.hypot(p[0], p[1]) < 5000) { app.well.pos = p; renderTool(); }
     return;
   }
-  const id = renderer.pick(x, y);
+  const id = renderer.pick(x, y, reach);
   const now = performance.now();
   if (id) {
     if (now - lastClick < 350 && id === renderer.focusId) renderer.frameBody(id);
@@ -172,7 +217,12 @@ function clickScene(x, y) {
   lastClick = now;
 }
 
-addEventListener('resize', () => { renderer.resize(); timeline.resize(); });
+// Sizes follow the elements themselves: rotating a phone or opening a sheet
+// changes the canvas and the timeline without a window resize.
+const relayout = () => { renderer.resize(); timeline.resize(); applyLayout(); };
+addEventListener('resize', relayout);
+new ResizeObserver(relayout).observe($('timeline-wrap'));
+new ResizeObserver(relayout).observe(view);
 addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLInputElement && e.target.type !== 'range') return;
   const k = e.key;
@@ -184,7 +234,7 @@ addEventListener('keydown', (e) => {
   else if (k === 'r' || k === 'R') play(-1);
   else if (k === 'm' || k === 'M') { music.toggle(); syncMusic(); }
   else if (k === 'z' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); undo(); }
-  else if (k === 'Escape') { $('help').hidden = true; $('chronicle').hidden = true; setTool(null); }
+  else if (k === 'Escape') { openSheet(null); setTool(null); }
   else if (k === '0') renderer.frameSystem();
   else if (k === '1') renderer.frameBody('sun');
   else if (k >= '2' && k <= '9') { const id = BODIES[+k - 2].id; if (app.state.bodies.find((b) => b.id === id)?.exists) renderer.frameBody(id); }
@@ -230,8 +280,14 @@ function updateLabels() {
       el.className = 'lbl';
       el.innerHTML = `<i></i><span>${s.id === 'sun' ? 'Sun' : BODY[s.id].name}</span>`;
       el.style.color = s.id === 'sun' ? '#ffd9a0' : BODY[s.id].color;
-      el.onclick = () => { renderer.focus(s.id); renderChips(); };
-      el.ondblclick = () => renderer.frameBody(s.id);
+      // A second click or tap soon after the first flies in (touch has no dblclick).
+      let last = 0;
+      el.onclick = () => {
+        const now = performance.now();
+        if (now - last < 350) renderer.frameBody(s.id); else renderer.focus(s.id);
+        last = now;
+        renderChips();
+      };
       layer.appendChild(el);
     }
     seen.add(s.id);
@@ -306,7 +362,7 @@ function renderInfo() {
         ${b.projected ? '<p class="note">Projected from the last simulated orbit.</p>' : ''}`;
     }
   }
-  if (html !== renderInfo.last) { $('info').innerHTML = html; renderInfo.last = html; }
+  if (html !== renderInfo.last) { $('info-body').innerHTML = html; renderInfo.last = html; }
 }
 
 // --- intervention tools -----------------------------------------------------
@@ -368,11 +424,11 @@ function renderTool() {
     html = `<p>Pause at any moment, then push a world off course or open a temporary gravity well. The aftermath is simulated from that instant on.</p>`;
   } else if (app.tool === 'nudge') {
     const b = nudgeTarget();
-    if (!b) html = `<p>Click a planet or moon to choose what to push.</p>`;
+    if (!b) html = `<p>${TAP} a planet or moon to choose what to push.</p>`;
     else {
       const dv = nudgeVector(b);
       const speed = Math.hypot(b.rel[3], b.rel[4], b.rel[5]) / KMS;
-      html = `<p>Give <span class="target">${b.def.name}</span> a sudden change of velocity.</p>
+      html = `<p class="lead">Give <span class="target">${b.def.name}</span> a sudden change of velocity.</p>
         <div class="dirs">${DIRS.map(([k, n]) => `<button data-dir="${k}" class="${app.nudge.dir === k ? 'on' : ''}">${n}</button>`).join('')}</div>
         <div class="field"><div class="row"><span>Strength</span><b>${num(nudgeKms(), nudgeKms() < 1 ? 2 : 1)} km/s</b></div>
           <input type="range" min="0" max="1" step="0.002" value="${app.nudge.u}" data-k="nudge.u" />
@@ -382,11 +438,11 @@ function renderTool() {
     }
   } else {
     const m = wellMass(), d = wellYears();
-    let where = 'Click anywhere in space to place it on the plane of the planets.';
+    let where = `${TAP} anywhere in space to place it on the plane of the planets.`;
     if (app.well.pos) {
       const r = Math.hypot(app.well.pos[0], app.well.pos[1]);
       const dom = (r * Math.sqrt(m)) / (1 + Math.sqrt(m));
-      where = `Placed ${num(r, 2)} AU from the Sun. It out-pulls the Sun within ${auOrKm(dom)} of itself. Click elsewhere to move it.`;
+      where = `Placed ${num(r, 2)} AU from the Sun. It out-pulls the Sun within ${auOrKm(dom)} of itself. ${TAP} elsewhere to move it.`;
     }
     html = `<p>A point of extra gravity, fixed in space, that pulls on everything — the Sun included — and then vanishes.</p>
       <div class="field"><div class="row"><span>Mass</span><b>${massText(m)}</b></div><input type="range" min="0" max="1" step="0.002" value="${app.well.mu}" data-k="well.mu" /></div>
@@ -441,6 +497,7 @@ function applyWell() {
 }
 function afterApply(rate) {
   setTool(null);
+  if (mqSheets.matches) openSheet(null); // get out of the way of the aftermath
   setRate(rateFor(rate));
   app.dir = 1; app.playing = true;
   timeline.show(app.t - 20 * RATES[app.rateIdx][0], app.t + 240 * RATES[app.rateIdx][0]);
@@ -508,12 +565,14 @@ function renderChronicle() {
     const cls = `${e.kind}${e.averted ? ' averted' : ''}${!nowMarked && e.t > app.t ? ((nowMarked = true), ' past-now') : ''}`;
     return `<div class="ch ${cls}" data-ev="${esc(e.id)}"><time>${formatTimeShort(e.t)}</time><div><b>${esc(e.title)}</b><small>${e.averted ? 'Averted' : e.projected ? 'Projected' : ''}</small></div></div>`;
   }).join('');
-  if (html !== renderChronicle.last) { const top = $('chronicle').scrollTop; $('chronicle').innerHTML = html; $('chronicle').scrollTop = top; renderChronicle.last = html; }
+  if (html !== renderChronicle.last) { const top = $('chronicle').scrollTop; $('chronicle-body').innerHTML = html; $('chronicle').scrollTop = top; renderChronicle.last = html; }
 }
 $('chronicle').addEventListener('click', (e) => {
   const id = e.target.closest('.ch')?.dataset.ev;
   const ev = world.events().find((x) => x.id === id);
-  if (ev) jumpTo(ev);
+  if (!ev) return;
+  if (mqPhone.matches) openSheet(null); // on a phone the list covers what it jumps to
+  jumpTo(ev);
 });
 
 // --- main loop --------------------------------------------------------------
@@ -574,9 +633,11 @@ function frame(now) {
   if (now - lastSlow > 160) {
     lastSlow = now;
     renderInfo(); renderChips(); renderTool(); renderInterventions();
+    applyLayout();
   }
 }
 function loop(now) { frame(now); requestAnimationFrame(loop); }
+window.__longnow.timeline = timeline;
 window.__longnow.tick = (n = 1) => { for (let i = 0; i < n; i++) frame(lastFrame + 16.7); };
 
 timeline.setData(world.events(), world.segments());
@@ -584,7 +645,7 @@ world.stateAt(app.t, app.state);
 renderer.lastState = app.state;
 renderer.frameSystem();
 renderer.dist = renderer.distTarget;
-syncTransport(); renderChips(); renderTool();
+syncTransport(); renderChips(); renderTool(); applyLayout();
 // Build the shaders and load the continents before the first frame.
 Promise.all([renderer.warmUp(), renderer.paleo.loaded]).finally(() => {
   $('boot').classList.add('done');

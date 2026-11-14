@@ -18,6 +18,7 @@ import { elementsToState, stateToElements, orbitPoints } from '../sim/kepler.js'
 import { bodyLook } from '../sim/surface.js';
 
 const ORBIT_N = 360;
+const FOV = 38; // vertical field of view on a landscape screen, degrees
 const MAX_ANGLE_PER_FRAME = 0.11; // rad: cap on displayed orbital motion at high time rates
 const smooth = (a, b, x) => { const u = Math.min(1, Math.max(0, (x - a) / (b - a))); return u * u * (3 - 2 * u); };
 const C = (r, g, b) => new THREE.Color().setRGB(r, g, b, THREE.LinearSRGBColorSpace);
@@ -47,12 +48,17 @@ export class Renderer {
     this.canvas = canvas;
     const renderer = (this.gl = new THREE.WebGLRenderer({ canvas, antialias: false, logarithmicDepthBuffer: true, powerPreference: 'high-performance' }));
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    // Phones and tablets: lighter anti-aliasing, and the resolution steps down
+    // by itself if the frame rate cannot be held (see _adapt).
+    this.adaptive = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.0;
     renderer.setClearColor(0x000000, 1);
 
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(38, 1, 1e-4, 1e12);
+    this.camera = new THREE.PerspectiveCamera(FOV, 1, 1e-4, 1e12);
+    this.shift = new THREE.Vector2(); // where the scene centre sits, CSS px from the canvas centre
+    this.shiftTarget = new THREE.Vector2();
 
     // Camera rig: orbiting the focus at `dist` AU.
     this.focusId = 'sun';
@@ -83,7 +89,7 @@ export class Renderer {
 
     renderer.setSize(Math.max(2, canvas.clientWidth || window.innerWidth), Math.max(2, canvas.clientHeight || window.innerHeight), false);
     const size = renderer.getDrawingBufferSize(new THREE.Vector2());
-    const target = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: 4 });
+    const target = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: this.adaptive ? 2 : 4 });
     this.composer = new EffectComposer(renderer, target);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.9, 0.55, 1.0);
@@ -345,11 +351,15 @@ export class Renderer {
     this.gl.setSize(w, h, false);
     this.composer.setSize(w, h);
     this.camera.aspect = w / h;
-    this.camera.updateProjectionMatrix();
+    // On an upright phone the fixed vertical angle would leave a sliver of
+    // width, so open the lens up until the view is as wide as a 4:5 window's.
+    const widen = Math.min(1.9, Math.max(1, 0.8 / this.camera.aspect));
+    this.camera.fov = (2 * Math.atan(Math.tan((FOV * DEG) / 2) * widen)) / DEG;
     const px = this.gl.getPixelRatio();
     this.viewport.set(w * px, h * px);
     this.cssSize = { w, h };
     this.pixelRatio = px;
+    this._applyView(0);
   }
 
   radiusOf(id) {
@@ -389,10 +399,39 @@ export class Renderer {
     const lead = d.pos.lengthSq() > 1e-12 ? d.pos : null;
     return lead ? Math.atan2(lead.y, -lead.x) : 0;
   }
+  /** Puts the centre of the scene (dx, dy) CSS px from the centre of the canvas, to clear panels drawn over it. */
+  setViewShift(dx, dy) { this.shiftTarget.set(dx, dy); }
+  _applyView(ease) {
+    this.shift.lerp(this.shiftTarget, ease);
+    if (this.shift.distanceTo(this.shiftTarget) < 0.25) this.shift.copy(this.shiftTarget);
+    const { w, h } = this.cssSize || { w: 2, h: 2 };
+    if (this.shift.lengthSq() > 0.01 && this.cssSize) this.camera.setViewOffset(w, h, -this.shift.x, -this.shift.y, w, h);
+    else if (this.camera.view) this.camera.clearViewOffset();
+    this.camera.updateProjectionMatrix();
+  }
+  setPixelRatio(pr) {
+    this.gl.setPixelRatio(pr);
+    this.composer.setPixelRatio(pr);
+    this.resize();
+  }
+  // Drops the rendering resolution a step when two measured stretches in a row
+  // average under 40 frames a second. It never climbs back, so it cannot hunt.
+  _adapt(frameDt) {
+    if (!this.adaptive || this.realTime < 12 || this.pixelRatio <= 1) return;
+    const p = this._perf || (this._perf = { n: 0, sum: 0, slow: 0, skip: 0 });
+    if (p.skip > 0) { p.skip--; return; }
+    p.n++; p.sum += frameDt;
+    if (p.n < 90) return;
+    p.slow = p.sum / p.n > 1 / 40 ? p.slow + 1 : 0;
+    p.n = 0; p.sum = 0;
+    if (p.slow >= 2) { p.slow = 0; p.skip = 45; this.setPixelRatio(Math.max(1, this.pixelRatio * 0.8)); }
+  }
   frameSystem() {
     let far = 4;
     if (this.lastState) for (const b of this.lastState.bodies) if (b.exists && b.el.bound && b.parent === 'sun' && b.def.kind !== 'dwarf') far = Math.max(far, b.el.Q);
-    this.focus('sun', Math.min(far, 400) * 3.1);
+    // Far enough back that the outermost orbit fits across a narrow screen too.
+    const tanH = Math.tan((this.camera.fov * DEG) / 2) * this.camera.aspect;
+    this.focus('sun', Math.min(far, 400) * Math.max(3.1, 1.12 / tanH));
   }
   rotate(dx, dy) {
     this.azimuth -= dx * 0.006;
@@ -413,6 +452,7 @@ export class Renderer {
   update(state, simDt, frameDt, world) {
     this.lastState = state;
     this.realTime += frameDt;
+    this._adapt(frameDt);
     const t = state.t;
     const sun = state.sun;
     const byId = {};
@@ -478,7 +518,7 @@ export class Renderer {
     this.camera.lookAt(0, 0, 0);
     this.camera.near = Math.min(0.2, Math.max(1e-5, (1 - this.radiusOf(this.focusId) * S) * 0.2));
     this.camera.far = 1e12;
-    this.camera.updateProjectionMatrix();
+    this._applyView(Math.min(1, frameDt * 9));
     this.camera.updateMatrixWorld();
     for (const o of this.skyObjects) o.position.copy(this.camera.position);
 
@@ -786,13 +826,12 @@ export class Renderer {
   // --- picking -------------------------------------------------------------
 
   /** Body under a screen point (CSS px), or null. */
-  pick(x, y) {
+  pick(x, y, reach = 14) {
     let best = null, bestD = Infinity;
     for (const s of this.screen) {
       if (!s.onScreen) continue;
       const d = Math.hypot(s.x - x, s.y - y);
-      const reach = Math.max(s.px, 14);
-      if (d < reach && d - s.px < bestD) { bestD = d - s.px; best = s.id; }
+      if (d < Math.max(s.px, reach) && d - s.px < bestD) { bestD = d - s.px; best = s.id; }
     }
     return best;
   }

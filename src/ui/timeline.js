@@ -74,29 +74,80 @@ export class Timeline {
   _bind() {
     const c = this.canvas;
     const local = (e) => { const r = c.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+    const clampT = (x) => Math.max(T_START, Math.min(T_END, this.tAt(x)));
+    // Mouse and pen act the moment they go down. A finger waits to see what it
+    // is doing: a tap jumps or scrubs to that spot, a drag scrubs, and a second
+    // finger turns the gesture into a pinch (zoom) and two-finger drag (pan).
+    const touches = new Map(); // pointerId → [x, y]
+    let first = null; // the finger that started the gesture: { id, x, y, moved }
+    let pinch = null; // { d, mx } while two fingers are down
+    let lastTap = null; // { time, x } for double-tap
+    const grip = () => { const [a, b] = [...touches.values()]; return { d: Math.max(24, Math.abs(a[0] - b[0])), mx: (a[0] + b[0]) / 2 }; };
+
     c.addEventListener('pointerdown', (e) => {
       const [x, y] = local(e);
+      try { c.setPointerCapture(e.pointerId); } catch {}
+      if (e.pointerType === 'touch') {
+        touches.set(e.pointerId, [x, y]);
+        if (touches.size === 1) first = { id: e.pointerId, x, y, moved: false };
+        else if (touches.size === 2) { this.dragging = false; pinch = grip(); if (first) first.moved = true; }
+        return;
+      }
       const hit = this._hit(x, y);
       if (hit) { this.onJump(hit.ev); return; }
       this.dragging = true;
-      c.setPointerCapture(e.pointerId);
-      this.onScrub(Math.max(T_START, Math.min(T_END, this.tAt(x))));
+      this.onScrub(clampT(x));
     });
     c.addEventListener('pointermove', (e) => {
       const [x, y] = local(e);
+      if (e.pointerType === 'touch') {
+        if (!touches.has(e.pointerId)) return;
+        touches.set(e.pointerId, [x, y]);
+        if (touches.size >= 2 && pinch) {
+          const g = grip();
+          this.zoomAt(pinch.mx, pinch.d / g.d);
+          const slide = ((pinch.mx - g.mx) / this.w) * this.span;
+          this.setView(this.v0 + slide, this.v1 + slide);
+          pinch = g;
+          return;
+        }
+        if (!first || first.id !== e.pointerId || pinch) return;
+        if (!first.moved && Math.hypot(x - first.x, y - first.y) > 8) { first.moved = true; this.dragging = true; }
+      }
       if (this.dragging) {
         // Dragging past the edge pans the view.
         if (x < 8 && this.v0 > T_START - PAD) this.setView(this.v0 - this.span * 0.02, this.v1 - this.span * 0.02);
         if (x > this.w - 8 && this.v1 < T_END + PAD) this.setView(this.v0 + this.span * 0.02, this.v1 + this.span * 0.02);
-        this.onScrub(Math.max(T_START, Math.min(T_END, this.tAt(x))));
+        this.onScrub(clampT(x));
         return;
       }
+      if (e.pointerType === 'touch') return;
       const hit = this._hit(x, y);
       if (hit !== this.hover) { this.hover = hit; this._dirty = true; }
       c.style.cursor = hit ? 'pointer' : 'ew-resize';
       this.onHover(hit ? hit.ev : null, e.clientX, e.clientY, this.tAt(x));
     });
-    const end = (e) => { if (this.dragging) { this.dragging = false; try { c.releasePointerCapture(e.pointerId); } catch {} } };
+    const end = (e) => {
+      if (e.pointerType === 'touch' && touches.has(e.pointerId)) {
+        const [x, y] = local(e);
+        touches.delete(e.pointerId);
+        if (touches.size < 2) pinch = null;
+        if (first && first.id === e.pointerId) {
+          if (!first.moved && e.type === 'pointerup') {
+            const now = performance.now();
+            if (lastTap && now - lastTap.time < 320 && Math.abs(lastTap.x - x) < 32) { this.fit(); lastTap = null; }
+            else {
+              lastTap = { time: now, x };
+              const hit = this._hit(x, y, 9);
+              if (hit) this.onJump(hit.ev); else this.onScrub(clampT(x));
+            }
+          }
+          first = null;
+        }
+        if (touches.size === 0) first = null;
+      }
+      if (this.dragging) { this.dragging = false; try { c.releasePointerCapture(e.pointerId); } catch {} }
+    };
     c.addEventListener('pointerup', end);
     c.addEventListener('pointercancel', end);
     c.addEventListener('pointerleave', () => { this.hover = null; this._dirty = true; this.onHover(null); });
@@ -111,15 +162,16 @@ export class Timeline {
     c.addEventListener('dblclick', () => this.fit());
   }
 
-  _hit(x, y) {
+  /** The flag at a point, if any. `slop` widens the targets (CSS px) for fingers. */
+  _hit(x, y, slop = 0) {
     for (let i = this.layout.length - 1; i >= 0; i--) {
       const L = this.layout[i];
-      if (L.label && x >= L.lx - 3 && x <= L.lx + L.lw + 3 && y >= L.ly - 11 && y <= L.ly + 4) return L;
+      if (L.label && x >= L.lx - 3 - slop && x <= L.lx + L.lw + 3 + slop && y >= L.ly - 11 - slop / 2 && y <= L.ly + 4 + slop / 2) return L;
     }
-    let best = null, bd = 7;
+    let best = null, bd = 7 + slop;
     for (const L of this.layout) {
       const d = Math.abs(L.x - x);
-      if (d < bd && y > this.barY - 14 && y < this.barY + 12) { bd = d; best = L; }
+      if (d < bd && y > this.barY - 14 - slop && y < this.barY + 12 + slop) { bd = d; best = L; }
     }
     return best;
   }
@@ -228,7 +280,7 @@ export class Timeline {
     const { ctx, w, barY } = this;
     this._layoutFor = `${this.v0}|${this.v1}|${w}`;
     this._dirty = false;
-    const rows = [barY - 16, barY - 32, barY - 48, barY - 64, barY - 80];
+    const rows = [barY - 16, barY - 32, barY - 48, barY - 64, barY - 80].filter((y) => y >= 8); // a short timeline has fewer rows
     const taken = rows.map(() => []);
     const vis = [];
     for (const ev of this.events) {

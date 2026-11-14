@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#000000" />
   <title>Long Now: the life of the solar system</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="stylesheet" href="/src/ui/style.css" />
@@ -19,9 +20,13 @@
   </header>
 
   <nav id="bodies" aria-label="Bodies"></nav>
-  <section id="info" class="panel" aria-live="off"></section>
+  <section id="info" class="panel" aria-live="off">
+    <button class="sheet-close" data-close aria-label="Close">✕</button>
+    <div id="info-body"></div>
+  </section>
 
   <section id="tools" class="panel">
+    <button class="sheet-close" data-close aria-label="Close">✕</button>
     <div class="panel-title">Intervene</div>
     <div class="seg" role="tablist">
       <button data-tool="nudge" role="tab">Nudge a body</button>
@@ -38,7 +43,7 @@
   <footer id="dock">
     <div id="timeline-wrap"><canvas id="timeline"></canvas></div>
     <div id="transport">
-      <div class="group">
+      <div class="group play">
         <button id="btn-prev" title="Previous event (←)">⏮</button>
         <button id="btn-rev" title="Play backward (R)">◀</button>
         <button id="btn-play" class="primary" title="Play / pause (space)">▶</button>
@@ -50,6 +55,8 @@
         <output id="speed-out"></output>
       </div>
       <div class="group right">
+        <button id="btn-tools" class="sheet-tab" title="Push a world off course">Intervene</button>
+        <button id="btn-info" class="sheet-tab" title="About the body you are following">Info</button>
         <button id="btn-now" title="Jump to the present day">Today</button>
         <button id="btn-fit" title="Show the whole timeline">Whole timeline</button>
         <button id="btn-chron" title="List every event">Chronicle</button>
@@ -59,10 +66,21 @@
     </div>
   </footer>
 
-  <section id="chronicle" class="panel" hidden></section>
+  <section id="chronicle" class="panel" hidden>
+    <button class="sheet-close" data-close aria-label="Close">✕</button>
+    <div id="chronicle-body"></div>
+  </section>
   <section id="help" class="panel" hidden>
+    <button class="sheet-close" data-close aria-label="Close">✕</button>
     <div class="panel-title">Controls</div>
-    <dl>
+    <dl class="for-touch">
+      <dt>Drag</dt><dd>orbit the camera</dd>
+      <dt>Pinch</dt><dd>zoom, from a planet's surface to the edge of the system</dd>
+      <dt>Tap a body</dt><dd>follow it · double-tap to fly in</dd>
+      <dt>Timeline</dt><dd>drag to scrub · pinch to zoom in on an era · drag with two fingers to slide along it · tap a flag to jump there · double-tap to see it all</dd>
+      <dt>Intervene</dt><dd>pause, pick a world, then nudge it or open a gravity well · <i>Undo last</i> takes it back</dd>
+    </dl>
+    <dl class="for-mouse">
       <dt>Drag</dt><dd>orbit the camera</dd>
       <dt>Scroll</dt><dd>zoom, from a planet's surface to the edge of the system</dd>
       <dt>Click a body</dt><dd>follow it · double-click to fly in</dd>

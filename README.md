@@ -25,6 +25,11 @@ Then open the printed URL. `npm test` runs the numerical checks for the physics.
 | `M` | music on / off |
 | ⌘Z | undo your last intervention |
 
+On a phone or tablet: drag to orbit, pinch to zoom, tap a body to follow it and double-tap to fly
+in. On the timeline, drag to scrub, pinch to zoom into an era, drag with two fingers to slide along
+it and double-tap to see it all. The Intervene, Info and Chronicle panels open from the buttons
+along the bottom.
+
 **Nudge a body** gives a planet or moon an instantaneous change of velocity (speed up, slow down,
 toward or away from the Sun, up or down out of the plane). The dashed line previews the new orbit.
 
