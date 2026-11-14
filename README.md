@@ -75,3 +75,11 @@ earlier time than an existing intervention replaces the later ones.
 node tools/fetch-paleo.mjs   # downloads and rasterises reconstructions (cached in tools/.cache)
 node tools/pack-paleo.mjs    # adds procedural frames and writes public/data/paleo.bin
 ```
+
+## Licence
+
+The code is released under the [MIT licence](LICENSE).
+
+The continent data in `public/data/paleo.bin` is derived from the Cao et al. (2024) plate model and
+remains under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); if you redistribute it,
+keep the attribution in [CREDITS.md](CREDITS.md).
