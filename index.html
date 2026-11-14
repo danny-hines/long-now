@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Orrery — the life of the solar system</title>
+  <link rel="stylesheet" href="/src/ui/style.css" />
+</head>
+<body>
+  <canvas id="view"></canvas>
+  <div id="boot"><div><b>Orrery</b><span>gathering dust and gas…</span></div></div>
+  <div id="labels"></div>
+
+  <header id="clock">
+    <div class="era" id="era"></div>
+    <div class="time" id="time"></div>
+    <div class="sub"><span id="sunline"></span><span class="badge" id="badge" hidden></span></div>
+  </header>
+
+  <nav id="bodies" aria-label="Bodies"></nav>
+  <section id="info" class="panel" aria-live="off"></section>
+
+  <section id="tools" class="panel">
+    <div class="panel-title">Intervene</div>
+    <div class="seg" role="tablist">
+      <button data-tool="nudge" role="tab">Nudge a body</button>
+      <button data-tool="well" role="tab">Gravity well</button>
+    </div>
+    <div id="tool-body"></div>
+    <div id="iv-list"></div>
+    <div id="sim-status" class="status"></div>
+  </section>
+
+  <div id="toast" hidden></div>
+  <div id="tip" hidden></div>
+
+  <footer id="dock">
+    <div id="timeline-wrap"><canvas id="timeline"></canvas></div>
+    <div id="transport">
+      <div class="group">
+        <button id="btn-prev" title="Previous event (←)">⏮</button>
+        <button id="btn-rev" title="Play backward (R)">◀</button>
+        <button id="btn-play" class="primary" title="Play / pause (space)">▶</button>
+        <button id="btn-next" title="Next event (→)">⏭</button>
+      </div>
+      <div class="group speed">
+        <label for="speed">Speed</label>
+        <input id="speed" type="range" min="0" max="13" step="1" />
+        <output id="speed-out"></output>
+      </div>
+      <div class="group right">
+        <button id="btn-now" title="Jump to the present day">Today</button>
+        <button id="btn-fit" title="Show the whole timeline">Whole timeline</button>
+        <button id="btn-chron" title="List every event">Chronicle</button>
+        <button id="btn-help" title="Controls">?</button>
+      </div>
+    </div>
+  </footer>
+
+  <section id="chronicle" class="panel" hidden></section>
+  <section id="help" class="panel" hidden>
+    <div class="panel-title">Controls</div>
+    <dl>
+      <dt>Drag</dt><dd>orbit the camera</dd>
+      <dt>Scroll</dt><dd>zoom, from a planet's surface to the edge of the system</dd>
+      <dt>Click a body</dt><dd>follow it · double-click to fly in</dd>
+      <dt>Timeline</dt><dd>drag to scrub · scroll to zoom in on an era · click a flag to jump there</dd>
+      <dt>Space</dt><dd>play / pause</dd>
+      <dt>, &nbsp;.</dt><dd>slower / faster</dd>
+      <dt>← &nbsp;→</dt><dd>previous / next event</dd>
+      <dt>0–9</dt><dd>whole system, Sun, Mercury … Neptune</dd>
+      <dt>⌘Z</dt><dd>undo your last intervention</dd>
+    </dl>
+    <p class="fine">Orbits after an intervention are computed by a real N-body integration running in the background. Where it has not reached yet, the view is a projection from the last simulated orbits.</p>
+  </section>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

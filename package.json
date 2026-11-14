@@ -1,0 +1,23 @@
+{
+  "name": "solar-system-game",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "test": "node tests/run.mjs && node tests/world.mjs",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "bake": "node tools/bake-paleo.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "three": "^0.187.0"
+  },
+  "devDependencies": {
+    "d3-geo": "^3.1.2",
+    "vite": "^8.3.8"
+  }
+}
