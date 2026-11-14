@@ -13,6 +13,12 @@ and distributed under the [Creative Commons Attribution 4.0](https://creativecom
 The outlines were rasterised to 0.5° land masks (`public/data/paleo.bin`) by `tools/fetch-paleo.mjs` and
 `tools/pack-paleo.mjs`. Frames older than 1.8 Ga and all future frames are procedural, not data.
 
+## Music
+
+The ambient score (`public/audio/score.mp3`) was generated with ElevenLabs Music (model
+`eleven_music_v2_5`) from a text prompt describing slow, drone-based ambient music. Check the
+ElevenLabs terms for your plan before reusing it elsewhere.
+
 ## Science references
 
 - Solar evolution: Schröder, K.-P. & Smith, R. C. (2008), *Distant future of the Sun and Earth revisited*, MNRAS 386, 155;

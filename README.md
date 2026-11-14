@@ -1,4 +1,4 @@
-# Long Now — the life of the solar system
+# Long Now: the life of the solar system
 
 Watch the solar system from its birth in a collapsing cloud 4.568 billion years ago to the Sun's
 death as a white dwarf 7.7 billion years from now. Scrub anywhere on the timeline, play at anything
@@ -22,6 +22,7 @@ Then open the printed URL. `npm test` runs the numerical checks for the physics.
 | Space, `,` `.` | play/pause, slower/faster |
 | `←` `→` | previous / next event |
 | `0`–`9` | whole system, Sun, Mercury … Neptune |
+| `M` | music on / off |
 | ⌘Z | undo your last intervention |
 
 **Nudge a body** gives a planet or moon an instantaneous change of velocity (speed up, slow down,

@@ -1,6 +1,7 @@
 import { World } from './sim/world.js';
 import { Renderer } from './render/renderer.js';
 import { Timeline } from './ui/timeline.js';
+import { Music } from './ui/music.js';
 import { BODIES, BODY } from './sim/bodies.js';
 import { T_START, T_END, T_INTERVENE_MIN, KMS, MEARTH, MJUP, AU_KM, RSUN_AU, YEAR_S, ENGULF_FACTOR } from './sim/constants.js';
 import { SUN_PHASE_NAMES } from './sim/sun.js';
@@ -38,7 +39,8 @@ const app = {
   state: world.makeState(),
   scrubbing: false,
 };
-window.__longnow = { world, renderer, app }; // handy in the console
+const music = new Music('audio/score.mp3');
+window.__longnow = { world, renderer, app, music }; // handy in the console
 
 const timeline = new Timeline($('timeline'), {
   onScrub: (t) => { app.t = t; app.playing = false; app.scrubbing = true; syncTransport(); },
@@ -104,6 +106,17 @@ $('speed').oninput = (e) => setRate(+e.target.value);
 $('btn-now').onclick = () => { app.t = 0; app.playing = false; syncTransport(); timeline.follow(0); };
 $('btn-fit').onclick = () => timeline.fit();
 $('btn-chron').onclick = () => { $('chronicle').hidden = !$('chronicle').hidden; $('help').hidden = true; renderChronicle(); };
+// Music starts on the first interaction (browsers block sound before one).
+function syncMusic() {
+  $('btn-music').classList.toggle('on', music.enabled);
+  $('btn-music').title = music.enabled ? 'Music on — click to mute (M)' : 'Music off — click to play (M)';
+  $('btn-music').setAttribute('aria-pressed', String(music.enabled));
+}
+const firstGesture = () => { music.start(); removeEventListener('pointerdown', firstGesture, true); removeEventListener('keydown', firstGesture, true); };
+addEventListener('pointerdown', firstGesture, true);
+addEventListener('keydown', firstGesture, true);
+$('btn-music').onclick = () => { music.toggle(); syncMusic(); };
+syncMusic();
 $('btn-help').onclick = () => { $('help').hidden = !$('help').hidden; $('chronicle').hidden = true; };
 
 // --- camera input -----------------------------------------------------------
@@ -169,6 +182,7 @@ addEventListener('keydown', (e) => {
   else if (k === 'ArrowLeft') { e.preventDefault(); hop(-1); }
   else if (k === 'ArrowRight') { e.preventDefault(); hop(1); }
   else if (k === 'r' || k === 'R') play(-1);
+  else if (k === 'm' || k === 'M') { music.toggle(); syncMusic(); }
   else if (k === 'z' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); undo(); }
   else if (k === 'Escape') { $('help').hidden = true; $('chronicle').hidden = true; setTool(null); }
   else if (k === '0') renderer.frameSystem();
@@ -534,6 +548,7 @@ function frame(now) {
 
   renderer.update(app.state, simDt, dt, world);
   renderer.render();
+  music.update(dt);
   updateLabels();
 
   // Clock.

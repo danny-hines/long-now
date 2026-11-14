@@ -142,7 +142,7 @@ input[type="range"] { width: 100%; accent-color: var(--amber); height: 18px; mar
   #bodies { max-width: 300px; }
   #tools { top: auto; bottom: 200px; max-height: 40vh; }
   .speed input { width: 120px; }
-  #transport .right button:not(#btn-chron) { display: none; }
+  #transport .right button:not(#btn-chron):not(#btn-music) { display: none; }
 }
 
 #boot { position: fixed; inset: 0; z-index: 10; background: #000; display: grid; place-items: center; transition: opacity 0.8s; }
@@ -150,3 +150,6 @@ input[type="range"] { width: 100%; accent-color: var(--amber); height: 18px; mar
 #boot b { display: block; font-weight: 300; font-size: 34px; letter-spacing: 0.3em; text-transform: uppercase; text-align: center; }
 #boot span { display: block; margin-top: 10px; color: var(--dim); letter-spacing: 0.18em; font-size: 11px; text-transform: uppercase; text-align: center; animation: pulse 1.6s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: 0.35; } }
+
+#btn-music { color: var(--faint); text-decoration: line-through; }
+#btn-music.on { color: var(--ink); text-decoration: none; }
